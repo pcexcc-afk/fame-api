@@ -17,6 +17,14 @@ fake_db = {
 def home():
     return "API работает!"
 
+@app.route('/api/lists', methods=['GET'])
+def get_lists():
+    return jsonify({
+        "fame": fake_db.get("fame", []),
+        "fake": fake_db.get("fake", []),
+        "scam": fake_db.get("scam", [])
+    })
+
 @app.route('/api/check', methods=['POST'])
 def check():
     data = request.json or {}
