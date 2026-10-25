@@ -4,12 +4,20 @@ import os
 
 app = Flask(__name__)
 
-# Список сайтов для проверки
 SITES = {
     "GitHub": "https://github.com/{}",
     "TikTok": "https://www.tiktok.com/@{}",
     "YouTube": "https://www.youtube.com/@{}",
     "Telegram": "https://t.me/{}"
+}
+
+# Временная база в памяти (пока сервер работает)
+# Для постоянного хранения нужна настоящая база данных, но для теста сойдет
+fake_db = {
+    "scam": ["bad_user", "scammer"],
+    "fake": ["0ksy", "bully_fake"],
+    "fame": ["doctor", "admin"],
+    "balances": {}
 }
 
 @app.route('/')
@@ -35,29 +43,50 @@ def check():
         except:
             pass
 
-    # ТУТ ПОКА ЗАГЛУШКА (потом заменишь на свою базу)
-    is_scam = False
-    is_fake = False
-    scam_reason = ""
-    fake_reason = ""
-
-    if username in ["bad_user", "scammer"]:
-        is_scam = True
-        scam_reason = "Кинул на 500 звезд"
-    elif username in ["0ksy", "bully_fake"]:
-        is_fake = True
-        fake_reason = "Копия профиля"
+    is_scam = username in fake_db["scam"]
+    is_fake = username in fake_db["fake"]
 
     return jsonify({
         "username": username,
         "is_scam": is_scam,
-        "scam_reason": scam_reason,
+        "scam_reason": "Найден в базе" if is_scam else "",
         "is_fake": is_fake,
-        "fake_reason": fake_reason,
+        "fake_reason": "Найден в базе" if is_fake else "",
         "found_sites": found_sites
     })
 
+# ==================== АДМИНСКИЕ КОМАНДЫ С САЙТА ====================
+
+@app.route('/api/admin/action', methods=['POST'])
+def admin_action():
+    data = request.json
+    action = data.get('action')
+    target = data.get('target', '').lower().replace('@', '')
+    value = data.get('value')
+
+    if action == 'add_mark':
+        if value not in fake_db:
+            fake_db[value] = []
+        if target not in fake_db[value]:
+            fake_db[value].append(target)
+        return jsonify({"status": "ok", "msg": f"Метка {value} добавлена для {target}"})
+
+    elif action == 'remove_mark':
+        if value in fake_db and target in fake_db[value]:
+            fake_db[value].remove(target)
+        return jsonify({"status": "ok", "msg": f"Метка {value} убрана у {target}"})
+
+    elif action == 'balance':
+        fake_db["balances"][target] = fake_db["balances"].get(target, 0) + int(value)
+        return jsonify({"status": "ok", "msg": f"Баланс {target} увеличен на {value}"})
+
+    elif action == 'ban':
+        if target not in fake_db["scam"]:
+            fake_db["scam"].append(target)
+        return jsonify({"status": "ok", "msg": f"Пользователь {target} забанен"})
+
+    return jsonify({"status": "error", "msg": "Неизвестное действие"})
+
 if __name__ == '__main__':
-    # Render сам подставит нужный порт
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
