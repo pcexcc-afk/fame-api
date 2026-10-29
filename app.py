@@ -1,82 +1,109 @@
-from flask import Flask, request, jsonify
+from flfrom flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+import requests
+import whois
+import phonenumbers
+from phonenumbers import geocoder, carrier
+import re
 
 app = Flask(__name__)
-CORS(app) # РАЗРЕШАЕМ САЙТУ ОТПРАВЛЯТЬ ЗАПРОСЫ НА СЕРВЕР
-
-# Временная база в памяти
-fake_db = {
-    "scam": ["bad_user", "scammer"],
-    "fake": ["0ksy", "bully_fake"],
-    "fame": ["doctor", "admin"],
-    "balances": {}
-}
+CORS(app)
 
 @app.route('/')
 def home():
     return "API работает!"
 
-@app.route('/api/lists', methods=['GET'])
-def get_lists():
-    return jsonify({
-        "fame": fake_db.get("fame", []),
-        "fake": fake_db.get("fake", []),
-        "scam": fake_db.get("scam", [])
-    })
-
-@app.route('/api/check', methods=['POST'])
-def check():
+# 1. WHOIS (Информация о домене)
+@app.route('/api/whois', methods=['POST'])
+def get_whois():
     data = request.json or {}
-    username = data.get('username', '').lower().replace('@', '')
+    domain = data.get('domain', '').strip()
+    if not domain: return jsonify({"error": "Пустой домен"}), 400
     
-    if not username:
-        return jsonify({"error": "Введи ник"}), 400
+    try:
+        w = whois.whois(domain)
+        return jsonify({
+            "domain": domain,
+            "registrar": w.registrar or "Скрыто",
+            "creation_date": str(w.creation_date) if w.creation_date else "Неизвестно",
+            "expiration_date": str(w.expiration_date) if w.expiration_date else "Неизвестно",
+            "country": w.country or "Неизвестно"
+        })
+    except Exception as e:
+        return jsonify({"error": "Не удалось получить данные WHOIS"}), 500
 
-    is_scam = username in fake_db["scam"]
-    is_fake = username in fake_db["fake"]
-
-    return jsonify({
-        "username": username,
-        "is_scam": is_scam,
-        "scam_reason": "Найден в базе" if is_scam else "",
-        "is_fake": is_fake,
-        "fake_reason": "Найден в базе" if is_fake else "",
-        "found_sites": []
-    })
-
-@app.route('/api/admin/action', methods=['POST'])
-def admin_action():
+# 2. Анализ IP (Геолокация)
+@app.route('/api/ip', methods=['POST'])
+def get_ip():
     data = request.json or {}
-    action = data.get('action')
-    target = data.get('target', '').lower().replace('@', '')
-    value = data.get('value')
+    ip = data.get('ip', '').strip()
+    if not ip: return jsonify({"error": "Пустой IP"}), 400
+    
+    try:
+        # Используем бесплатный API ip-api.com
+        r = requests.get(f"http://ip-api.com/json/{ip}?lang=ru", timeout=5)
+        res = r.json()
+        if res.get('status') == 'success':
+            return jsonify({
+                "ip": ip,
+                "country": res.get('country', 'Неизвестно'),
+                "city": res.get('city', 'Неизвестно'),
+                "isp": res.get('isp', 'Неизвестно'),
+                "timezone": res.get('timezone', 'Неизвестно')
+            })
+        else:
+            return jsonify({"error": "IP не найден"}), 404
+    except Exception as e:
+        return jsonify({"error": "Ошибка запроса"}), 500
 
-    if action == 'add_mark':
-        if value not in fake_db:
-            fake_db[value] = []
-        if target not in fake_db[value]:
-            fake_db[value].append(target)
-        return jsonify({"status": "ok", "msg": f"Метка {value} добавлена для {target}"})
+# 3. Анализ Номера Телефона
+@app.route('/api/phone', methods=['POST'])
+def get_phone():
+    data = request.json or {}
+    phone = data.get('phone', '').strip()
+    if not phone: return jsonify({"error": "Пустой номер"}), 400
 
-    elif action == 'remove_mark':
-        if value in fake_db and target in fake_db[value]:
-            fake_db[value].remove(target)
-        return jsonify({"status": "ok", "msg": f"Метка {value} убрана у {target}"})
+    try:
+        # Добавляем плюс, если его нет
+        if not phone.startswith('+'):
+            phone = '+' + phone
+            
+        parsed = phonenumbers.parse(phone, None)
+        
+        if not phonenumbers.is_valid_number(parsed):
+            return jsonify({"error": "Неверный формат номера"}), 400
 
-    elif action == 'balance':
-        try:
-            fake_db["balances"][target] = fake_db["balances"].get(target, 0) + int(value)
-            return jsonify({"status": "ok", "msg": f"Баланс {target} увеличен на {value}"})
-        except ValueError:
-            return jsonify({"status": "error", "msg": "Неверная сумма"})
+        return jsonify({
+            "phone": phone,
+            "country": geocoder.description_for_number(parsed, "ru") or "Неизвестно",
+            "operator": carrier.name_for_number(parsed, "ru") or "Неизвестно",
+            "type": "Мобильный" if phonenumbers.number_type(parsed) == 1 else "Другой"
+        })
+    except Exception as e:
+        return jsonify({"error": "Ошибка обработки номера"}), 500
 
-    elif action == 'ban':
-        if target not in fake_db["scam"]:
-            fake_db["scam"].append(target)
-        return jsonify({"status": "ok", "msg": f"Пользователь {target} забанен"})
+# 4. Проверка Email (Имитация утечек, т.к. HIBP требует платный ключ)
+@app.route('/api/email', methods=['POST'])
+def get_email():
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return jsonify({"error": "Неверный формат email"}), 400
 
-    return jsonify({"status": "error", "msg": "Неизвестное действие"})
+    # Тут мы просто имитируем базу утечек для примера
+    leaks = []
+    if "test" in email or "admin" in email:
+        leaks = ["Adobe (2013)", "Canva (2019)", "LinkedIn (2021)"]
+    elif "mail.ru" in email:
+        leaks = ["База mail.ru (2022)"]
+    
+    return jsonify({
+        "email": email,
+        "status": "Найден в утечках" if leaks else "Утечек не найдено",
+        "leaks": leaks
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
