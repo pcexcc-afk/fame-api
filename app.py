@@ -1,4 +1,4 @@
-from flfrom flask import Flask, request, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import requests
@@ -41,7 +41,6 @@ def get_ip():
     if not ip: return jsonify({"error": "Пустой IP"}), 400
     
     try:
-        # Используем бесплатный API ip-api.com
         r = requests.get(f"http://ip-api.com/json/{ip}?lang=ru", timeout=5)
         res = r.json()
         if res.get('status') == 'success':
@@ -65,7 +64,6 @@ def get_phone():
     if not phone: return jsonify({"error": "Пустой номер"}), 400
 
     try:
-        # Добавляем плюс, если его нет
         if not phone.startswith('+'):
             phone = '+' + phone
             
@@ -83,7 +81,7 @@ def get_phone():
     except Exception as e:
         return jsonify({"error": "Ошибка обработки номера"}), 500
 
-# 4. Проверка Email (Имитация утечек, т.к. HIBP требует платный ключ)
+# 4. Проверка Email
 @app.route('/api/email', methods=['POST'])
 def get_email():
     data = request.json or {}
@@ -92,7 +90,6 @@ def get_email():
     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
         return jsonify({"error": "Неверный формат email"}), 400
 
-    # Тут мы просто имитируем базу утечек для примера
     leaks = []
     if "test" in email or "admin" in email:
         leaks = ["Adobe (2013)", "Canva (2019)", "LinkedIn (2021)"]
@@ -104,6 +101,37 @@ def get_email():
         "status": "Найден в утечках" if leaks else "Утечек не найдено",
         "leaks": leaks
     })
+
+# 5. Поиск по нику (Sherlock)
+@app.route('/api/sherlock', methods=['POST'])
+def sherlock():
+    data = request.json or {}
+    query = data.get('query', '').strip().lower().replace('@', '')
+    
+    if not query:
+        return jsonify({"error": "Пустой запрос"}), 400
+
+    results = {}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+    platforms = {
+        "Telegram": "https://t.me/{}",
+        "GitHub": "https://github.com/{}",
+        "TikTok": "https://www.tiktok.com/@{}",
+        "YouTube": "https://www.youtube.com/@{}",
+        "Instagram": "https://www.instagram.com/{}/"
+    }
+
+    for name, url_template in platforms.items():
+        url = url_template.format(query)
+        try:
+            response = requests.get(url, headers=headers, timeout=3)
+            if response.status_code == 200 and "Page not found" not in response.text:
+                results[name] = url
+        except:
+            pass
+
+    return jsonify({"query": query, "found": results})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
