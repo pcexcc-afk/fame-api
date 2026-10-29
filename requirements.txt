@@ -1,3 +1,5 @@
 flask
-requests
 flask-cors
+requests
+python-whois
+phonenumbers
