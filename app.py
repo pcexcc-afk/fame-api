@@ -1,137 +1,150 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
-import requests
-import whois
-import phonenumbers
-from phonenumbers import geocoder, carrier
-import re
+import sqlite3
+import random
 
 app = Flask(__name__)
 CORS(app)
 
+def get_db():
+    conn = sqlite3.connect('gifts.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
+    # Добавили user_id и is_premium (по умолчанию 1 - Премиум включен)
+    c.execute("""CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        display_name TEXT,
+        user_id TEXT,
+        anon_number TEXT DEFAULT 'Не задан',
+        grams INTEGER DEFAULT 0,
+        tons INTEGER DEFAULT 0,
+        stars INTEGER DEFAULT 1000,
+        is_premium INTEGER DEFAULT 1,
+        nft_username TEXT DEFAULT 'Не куплен'
+    )""")
+    conn.commit()
+    conn.close()
+
+init_db()
+
 @app.route('/')
 def home():
-    return "API работает!"
+    return "Pepegram API работает!"
 
-# 1. WHOIS (Информация о домене)
-@app.route('/api/whois', methods=['POST'])
-def get_whois():
-    data = request.json or {}
-    domain = data.get('domain', '').strip()
-    if not domain: return jsonify({"error": "Пустой домен"}), 400
+@app.route('/api/profile/<username>', methods=['GET'])
+def get_profile(username):
+    username = username.lower()
+    conn = get_db()
+    c = conn.cursor()
     
-    try:
-        w = whois.whois(domain)
-        return jsonify({
-            "domain": domain,
-            "registrar": w.registrar or "Скрыто",
-            "creation_date": str(w.creation_date) if w.creation_date else "Неизвестно",
-            "expiration_date": str(w.expiration_date) if w.expiration_date else "Неизвестно",
-            "country": w.country or "Неизвестно"
-        })
-    except Exception as e:
-        return jsonify({"error": "Не удалось получить данные WHOIS"}), 500
-
-# 2. Анализ IP (Геолокация)
-@app.route('/api/ip', methods=['POST'])
-def get_ip():
-    data = request.json or {}
-    ip = data.get('ip', '').strip()
-    if not ip: return jsonify({"error": "Пустой IP"}), 400
+    # Создаем юзера с ID и Премиумом
+    c.execute("SELECT user_id FROM users WHERE username = ?", (username,))
+    existing = c.fetchone()
     
-    try:
-        r = requests.get(f"http://ip-api.com/json/{ip}?lang=ru", timeout=5)
-        res = r.json()
-        if res.get('status') == 'success':
-            return jsonify({
-                "ip": ip,
-                "country": res.get('country', 'Неизвестно'),
-                "city": res.get('city', 'Неизвестно'),
-                "isp": res.get('isp', 'Неизвестно'),
-                "timezone": res.get('timezone', 'Неизвестно')
-            })
-        else:
-            return jsonify({"error": "IP не найден"}), 404
-    except Exception as e:
-        return jsonify({"error": "Ошибка запроса"}), 500
-
-# 3. Анализ Номера Телефона
-@app.route('/api/phone', methods=['POST'])
-def get_phone():
-    data = request.json or {}
-    phone = data.get('phone', '').strip()
-    if not phone: return jsonify({"error": "Пустой номер"}), 400
-
-    try:
-        if not phone.startswith('+'):
-            phone = '+' + phone
-            
-        parsed = phonenumbers.parse(phone, None)
-        
-        if not phonenumbers.is_valid_number(parsed):
-            return jsonify({"error": "Неверный формат номера"}), 400
-
-        return jsonify({
-            "phone": phone,
-            "country": geocoder.description_for_number(parsed, "ru") or "Неизвестно",
-            "operator": carrier.name_for_number(parsed, "ru") or "Неизвестно",
-            "type": "Мобильный" if phonenumbers.number_type(parsed) == 1 else "Другой"
-        })
-    except Exception as e:
-        return jsonify({"error": "Ошибка обработки номера"}), 500
-
-# 4. Проверка Email
-@app.route('/api/email', methods=['POST'])
-def get_email():
-    data = request.json or {}
-    email = data.get('email', '').strip().lower()
+    if not existing:
+        new_id = str(random.randint(100000000, 999999999))
+        c.execute("INSERT INTO users (username, display_name, user_id, stars) VALUES (?, ?, ?, 1000)", (username, username, new_id))
     
-    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-        return jsonify({"error": "Неверный формат email"}), 400
-
-    leaks = []
-    if "test" in email or "admin" in email:
-        leaks = ["Adobe (2013)", "Canva (2019)", "LinkedIn (2021)"]
-    elif "mail.ru" in email:
-        leaks = ["База mail.ru (2022)"]
+    c.execute("SELECT * FROM users WHERE username = ?", (username,))
+    user = c.fetchone()
+    conn.commit()
+    conn.close()
     
     return jsonify({
-        "email": email,
-        "status": "Найден в утечках" if leaks else "Утечек не найдено",
-        "leaks": leaks
+        "username": user["username"], 
+        "user_id": user["user_id"],
+        "anon_number": user["anon_number"],
+        "grams": user["grams"], 
+        "tons": user["tons"], 
+        "stars": user["stars"], 
+        "is_premium": user["is_premium"],
+        "nft_username": user["nft_username"]
     })
 
-# 5. Поиск по нику (Sherlock)
-@app.route('/api/sherlock', methods=['POST'])
-def sherlock():
+# АДМИН: Получить список всех игроков
+@app.route('/api/admin/get_all_users', methods=['GET'])
+def get_all_users():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users")
+    users = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return jsonify(users)
+
+# АДМИН: Выдать валюту
+@app.route('/api/admin/give_currency', methods=['POST'])
+def give_currency():
     data = request.json or {}
-    query = data.get('query', '').strip().lower().replace('@', '')
+    username = data.get('username', '').lower()
+    ctype = data.get('type') # 'stars', 'grams', 'tons'
+    amount = int(data.get('amount', 0))
     
-    if not query:
-        return jsonify({"error": "Пустой запрос"}), 400
+    if not username or amount == 0: return jsonify({"error": "Ошибка"}), 400
 
-    results = {}
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users (username, display_name) VALUES (?, ?)", (username, username))
+    
+    if ctype in ['stars', 'grams', 'tons']:
+        c.execute(f"UPDATE users SET {ctype} = {ctype} + ? WHERE username = ?", (amount, username))
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "ok", "msg": f"Выдано {amount} {ctype} для @{username}"})
+    
+    conn.close()
+    return jsonify({"error": "Неверный тип валюты"}), 400
 
-    platforms = {
-        "Telegram": "https://t.me/{}",
-        "GitHub": "https://github.com/{}",
-        "TikTok": "https://www.tiktok.com/@{}",
-        "YouTube": "https://www.youtube.com/@{}",
-        "Instagram": "https://www.instagram.com/{}/"
-    }
+# КАЗИНО (оставляем как было)
+@app.route('/api/casino/upgrader', methods=['POST'])
+def casino_upgrader():
+    data = request.json or {}
+    username = data.get('username', '').lower()
+    amount = int(data.get('amount', 0))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT stars FROM users WHERE username = ?", (username,))
+    user = c.fetchone()
+    if not user or user["stars"] < amount:
+        conn.close()
+        return jsonify({"error": "Недостаточно звезд"}), 403
+    c.execute("UPDATE users SET stars = stars - ? WHERE username = ?", (amount, username))
+    win = random.choice([True, False])
+    if win:
+        c.execute("UPDATE users SET stars = stars + ? WHERE username = ?", (amount * 2, username))
+        msg = f"Выигрыш! +{amount * 2} ⭐"
+    else:
+        msg = f"Проигрыш. -{amount} ⭐"
+    conn.commit()
+    conn.close()
+    return jsonify({"win": win, "message": msg})
 
-    for name, url_template in platforms.items():
-        url = url_template.format(query)
-        try:
-            response = requests.get(url, headers=headers, timeout=3)
-            if response.status_code == 200 and "Page not found" not in response.text:
-                results[name] = url
-        except:
-            pass
-
-    return jsonify({"query": query, "found": results})
+@app.route('/api/casino/rocket', methods=['POST'])
+def casino_rocket():
+    data = request.json or {}
+    username = data.get('username', '').lower()
+    amount = int(data.get('amount', 0))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT stars FROM users WHERE username = ?", (username,))
+    user = c.fetchone()
+    if not user or user["stars"] < amount:
+        conn.close()
+        return jsonify({"error": "Недостаточно звезд"}), 403
+    c.execute("UPDATE users SET stars = stars - ? WHERE username = ?", (amount, username))
+    win = random.choice([True, False, False])
+    if win:
+        c.execute("UPDATE users SET stars = stars + ? WHERE username = ?", (amount * 3, username))
+        msg = f"Ракета взлетела! +{amount * 3} ⭐"
+    else:
+        msg = f"Ракета упала. -{amount} ⭐"
+    conn.commit()
+    conn.close()
+    return jsonify({"win": win, "message": msg})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
