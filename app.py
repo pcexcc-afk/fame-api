@@ -1,283 +1,246 @@
-"""Pepegram backend. Запуск: pip install flask && python app.py  ->  http://localhost:5000"""
-import sqlite3, secrets, os
-from functools import wraps
-from flask import Flask, request, jsonify, g, send_from_directory
+"""from flask import Flask, request, jsonify
+from flask_cors import CORS
+import sqlite3
+import random
+import os
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-DB = os.path.join(BASE, 'pepegram.db')
 app = Flask(__name__)
+CORS(app)
+DB_FILE = 'orbitagram.db'
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, token TEXT UNIQUE, name TEXT, bio TEXT DEFAULT '',
-  stars INTEGER DEFAULT 1000, ton REAL DEFAULT 0, gram REAL DEFAULT 0, is_admin INTEGER DEFAULT 0,
-  frozen INTEGER DEFAULT 0, name_color TEXT DEFAULT '#1c2733', frame TEXT DEFAULT 'none', bg TEXT DEFAULT 'blue');
-CREATE TABLE IF NOT EXISTS gifts(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, emoji TEXT, price INTEGER,
-  gift_type TEXT DEFAULT 'regular', supply INTEGER DEFAULT 0, minted INTEGER DEFAULT 0);
-CREATE TABLE IF NOT EXISTS inventory(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, gift_id INTEGER,
-  number INTEGER, showcase INTEGER DEFAULT 0);
-CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, text TEXT,
-  ts DATETIME DEFAULT CURRENT_TIMESTAMP);
-"""
-SEED = [('Мишка', '🧸', 50, 'regular', 0), ('Роза', '🌹', 100, 'regular', 0), ('Торт', '🎂', 150, 'regular', 0),
-        ('Кубок', '🏆', 250, 'regular', 0), ('Ракета', '🚀', 300, 'regular', 0),
-        ('Алмаз', '💎', 500, 'market', 100), ('Пепе', '🐸', 1000, 'market', 50), ('Корона', '👑', 2500, 'market', 10)]
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
+    # Юзеры
+    c.execute("""CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY, name TEXT, username TEXT,
+        stars INTEGER DEFAULT 1000, ton REAL DEFAULT 0,
+        is_admin INTEGER DEFAULT 0, is_frozen INTEGER DEFAULT 0,
+        anon_number TEXT DEFAULT NULL, labels TEXT DEFAULT 'Нет'
+    )""")
+    # Подарки
+    c.execute("""CREATE TABLE IF NOT EXISTS gifts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT, emoji TEXT, price INTEGER,
+        gift_type TEXT DEFAULT 'regular',
+        upgrade_cost INTEGER DEFAULT 0
+    )""")
+    # Инвентарь
+    c.execute("""CREATE TABLE IF NOT EXISTS inventory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT, gift_id INTEGER,
+        is_upgraded INTEGER DEFAULT 0,
+        gift_number INTEGER
+    )""")
+    # Коды для входа
+    c.execute("""CREATE TABLE IF NOT EXISTS auth_codes (
+        phone TEXT PRIMARY KEY, code TEXT
+    )""")
+    
+    # Добавляем стартовые подарки, если пусто
+    c.execute("SELECT COUNT(*) FROM gifts")
+    if c.fetchone()[0] == 0:
+        gifts = [
+            # --- ОБЫЧНЫЕ (Regular) ---
+            ("Сердце с бантом","❤️",15,"regular",0),
+            ("Подарочная коробка","🎁",25,"regular",0),
+            ("Роза","🌹",25,"regular",0),
+            ("Шампанское","🍾",50,"regular",0),
+            ("Мишка с тыквой","🐻",50,"regular",0),
+            ("Торт","🎂",50,"regular",0),
+            ("Букет","💐",50,"regular",0),
+            ("Ракета","🚀",50,"regular",0),
+            ("Кубок","🏆",100,"regular",0),
+            ("Кольцо с бриллиантом","💍",100,"regular",0),
+            ("Бриллиант","💎",100,"regular",0),
+            
+            # --- МАРКЕТ (Market) ---
+            ("Мороженое рожок","🍦",300,"market",100),
+            ("Статуя Свободы","🗽",565,"market",200),
+            ("Фонарь","🏮",499,"market",200),
+            ("Собака-рэпер","🐕",565,"market",200),
+            ("Лапша","🍜",438,"market",150),
+            ("Радужный леденец","🍭",450,"market",150),
+            ("Эскимо","🍫",464,"market",150),
+            ("Фламинго-круг","🦩",460,"market",150),
+            ("Рюкзак","🎒",526,"market",200),
+            ("Какашка","💩",500,"market",200),
+            ("2025 год","🎊",399,"market",100),
+            ("Корона шута","🎭",470,"market",150),
+            ("Пряничное сердце","🍪",565,"market",200),
+            ("Пасхальный кролик","🐣",565,"market",200),
+            ("Медаль","🥇",532,"market",200),
+            ("Световой меч","⚔️",565,"market",200),
+            ("Котик в сердце","🐱",1451,"market",500),
+            ("Пепе","🐸",626336,"market",100000),
+            ("Маска Джейсона","😨",4030993,"market",500000),
+            ("Кулон-луна","🌙",565,"market",200),
+            ("Пионы","🌸",564,"market",200),
+            ("Гриб","🍄",565,"market",200),
+            ("Глинтвейн","🍷",500,"market",200),
+            ("Доска для сёрфинга","🏄",643,"market",250),
+            ("Шляпа ведьмы","🧙",770,"market",300),
+            ("Сакура","🌸",1016,"market",400),
+            ("Рождественский венок","🎄",530,"market",200),
+            ("Клубника в коробке","🍓",852,"market",350),
+            ("Снежный шар","❄️",624,"market",250),
+            
+            # --- ПРОДАННЫЕ (Sold) ---
+            ("Конь","🐴",0,"sold",0),
+            ("Надгробие RIP","🪦",15000,"sold",0),
+            ("Гроб","⚰️",5000,"sold",0),
+            ("Персонаж","🦸",41000,"sold",0),
+            ("Кроссовки","👟",10000,"sold",0),
+            ("Портфель","💼",5000,"sold",0)
+        ]
+        c.executemany("INSERT INTO gifts (name, emoji, price, gift_type, upgrade_cost) VALUES (?, ?, ?, ?, ?)", gifts)
+    conn.commit()
+    conn.close()
 
-def db():
-    if 'db' not in g:
-        g.db = sqlite3.connect(DB)
-        g.db.row_factory = sqlite3.Row
-    return g.db
+init_db()
 
+# --- АВТОРИЗАЦИЯ ---
+@app.route('/api/auth/verify', methods=['POST'])
+def verify_code():
+    data = request.json
+    phone = data.get('phone')
+    code = data.get('code')
+    
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT code FROM auth_codes WHERE phone = ?", (phone,))
+    row = c.fetchone()
+    
+    if not row or row['code'] != code:
+        conn.close()
+        return jsonify({"success": False, "error": "Неверный код"}), 401
+        
+    c.execute("SELECT * FROM users WHERE id = ?", (phone,))
+    user = c.fetchone()
+    if not user:
+        c.execute("INSERT INTO users (id, name) VALUES (?, ?)", (phone, "Игрок"))
+        conn.commit()
+        c.execute("SELECT * FROM users WHERE id = ?", (phone,))
+        user = c.fetchone()
+        
+    c.execute("DELETE FROM auth_codes WHERE phone = ?", (phone,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "user": dict(user)})
 
-@app.teardown_appcontext
-def close_db(_):
-    d = g.pop('db', None)
-    if d:
-        d.close()
+# --- ЮЗЕР ---
+@app.route('/api/user/<user_id>', methods=['GET'])
+def get_user(user_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    conn.close()
+    if user:
+        return jsonify(dict(user))
+    return jsonify({"error": "Не найден"}), 404
 
+# --- МАГАЗИН ---
+@app.route('/api/gifts', methods=['GET'])
+def get_gifts():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM gifts")
+    gifts = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return jsonify(gifts)
 
-def q(sql, a=(), one=False):
-    r = db().execute(sql, a).fetchall()
-    return (r[0] if r else None) if one else r
-
-
-def x(sql, a=()):
-    c = db().execute(sql, a)
-    db().commit()
-    return c.lastrowid
-
-
-def init():
-    con = sqlite3.connect(DB)
-    con.executescript(SCHEMA)
-    if not con.execute('SELECT 1 FROM gifts').fetchone():
-        con.executemany('INSERT INTO gifts(name,emoji,price,gift_type,supply) VALUES(?,?,?,?,?)', SEED)
-    con.commit()
-    con.close()
-
-
-def err(m, c=400):
-    return jsonify(success=False, error=m), c
-
-
-@app.after_request
-def cors(r):  # нужно, если фронтенд открыт не с этого же сервера (например, в APK)
-    r.headers['Access-Control-Allow-Origin'] = '*'
-    r.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-    r.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,OPTIONS'
-    return r
-
-
-def auth(admin=False):
-    def deco(f):
-        @wraps(f)
-        def w(*a, **k):
-            u = q('SELECT * FROM users WHERE token=?', (request.headers.get('Authorization', ''),), one=True)
-            if not u:
-                return err('Не авторизован', 401)
-            if admin and not u['is_admin']:
-                return err('Нет прав', 403)
-            g.u = u
-            return f(*a, **k)
-        return w
-    return deco
-
-
-def body():
-    return request.get_json(silent=True) or {}
-
-
-def user_json(u):
-    d = dict(u)
-    d.pop('token', None)
-    return d
-
-
-def gift_json(r):
-    d = dict(r)
-    if d['supply'] and d['minted'] >= d['supply']:
-        d['gift_type'] = 'sold'
-    return d
-
-
-@app.route('/')
-def index():
-    return send_from_directory(BASE, 'index.html')
-
-
-@app.route('/api/<path:_>', methods=['OPTIONS'])
-def opts(_):
-    return '', 204
-
-
-@app.post('/api/register')
-def register():
-    name = (body().get('name') or '').strip()[:32]
-    if not name:
-        return err('Введи имя')
-    first = q('SELECT 1 FROM users LIMIT 1', one=True) is None  # первый пользователь = админ
-    uid, token = str(secrets.randbelow(9 * 10 ** 8) + 10 ** 8), secrets.token_hex(24)
-    x('INSERT INTO users(id,token,name,is_admin) VALUES(?,?,?,?)', (uid, token, name, int(first)))
-    return jsonify(success=True, id=uid, token=token)
-
-
-@app.get('/api/me')
-@auth()
-def me():
-    return jsonify(user_json(g.u))
-
-
-@app.put('/api/me')
-@auth()
-def update_me():
-    b, allowed = body(), {'name': 32, 'bio': 140, 'name_color': 9, 'frame': 12, 'bg': 12}
-    for k, n in allowed.items():
-        if k in b:
-            v = str(b[k]).strip()[:n]
-            if k == 'name' and not v:
-                continue
-            x(f'UPDATE users SET {k}=? WHERE id=?', (v, g.u['id']))
-    return jsonify(success=True)
-
-
-@app.get('/api/gifts')
-@auth()
-def gifts():
-    return jsonify([gift_json(r) for r in q('SELECT * FROM gifts ORDER BY id')])
-
-
-def inv_rows(uid):
-    return q('''SELECT i.id,i.number,i.showcase,i.gift_id,g.name,g.emoji,g.supply,g.gift_type
-                FROM inventory i JOIN gifts g ON g.id=i.gift_id WHERE i.user_id=? ORDER BY i.id DESC''', (uid,))
-
-
-@app.get('/api/inventory')
-@auth()
-def inventory():
-    return jsonify([dict(r) for r in inv_rows(g.u['id'])])
-
-
-@app.post('/api/buy_gift')
-@auth()
+@app.route('/api/buy_gift', methods=['POST'])
 def buy_gift():
-    u = g.u
-    if u['frozen']:
-        return err('Аккаунт заморожен', 403)
-    gf = q('SELECT * FROM gifts WHERE id=?', (body().get('gift_id'),), one=True)
-    if not gf or gf['gift_type'] == 'sold':
-        return err('Недоступен')
-    if gf['supply'] and gf['minted'] >= gf['supply']:
-        return err('Распродан')
-    if u['stars'] < gf['price']:
-        return err('Не хватает звёзд')
-    n = gf['minted'] + 1
-    x('UPDATE users SET stars=stars-? WHERE id=?', (gf['price'], u['id']))
-    x('UPDATE gifts SET minted=? WHERE id=?', (n, gf['id']))
-    x('INSERT INTO inventory(user_id,gift_id,number) VALUES(?,?,?)', (u['id'], gf['id'], n))
-    return jsonify(success=True, new_balance=u['stars'] - gf['price'], number=n)
+    data = request.json
+    user_id = data.get('user_id')
+    gift_id = data.get('gift_id')
+    
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM gifts WHERE id = ?", (gift_id,))
+    gift = c.fetchone()
+    c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    
+    if user['is_frozen'] == 1:
+        conn.close()
+        return jsonify({"success": False, "error": "Аккаунт заморожен"}), 403
+        
+    if user['stars'] < gift['price']:
+        conn.close()
+        return jsonify({"success": False, "error": "Недостаточно звезд"}), 400
+        
+    new_balance = user['stars'] - gift['price']
+    c.execute("UPDATE users SET stars = ? WHERE id = ?", (new_balance, user_id))
+    
+    # Генерируем номер подарка
+    c.execute("SELECT COUNT(*) FROM inventory WHERE gift_id = ?", (gift_id,))
+    gift_num = c.fetchone()[0] + 1
+    
+    c.execute("INSERT INTO inventory (user_id, gift_id, gift_number) VALUES (?, ?, ?)", (user_id, gift_id, gift_num))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "new_balance": new_balance})
 
+# --- УЛУЧШЕНИЕ ---
+@app.route('/api/upgrade_gift', methods=['POST'])
+def upgrade_gift():
+    data = request.json
+    user_id = data.get('user_id')
+    inv_id = data.get('inv_id')
+    
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""SELECT i.id, g.upgrade_cost, i.is_upgraded 
+                 FROM inventory i JOIN gifts g ON i.gift_id = g.id 
+                 WHERE i.id = ? AND i.user_id = ?""", (inv_id, user_id))
+    item = c.fetchone()
+    
+    if not item:
+        conn.close()
+        return jsonify({"success": False, "error": "Подарок не найден"}), 404
+        
+    if item['is_upgraded'] == 1:
+        conn.close()
+        return jsonify({"success": False, "error": "Уже улучшен"}), 400
+        
+    c.execute("SELECT stars FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    
+    if user['stars'] < item['upgrade_cost']:
+        conn.close()
+        return jsonify({"success": False, "error": "Недостаточно звезд"}), 400
+        
+    c.execute("UPDATE users SET stars = stars - ? WHERE id = ?", (item['upgrade_cost'], user_id))
+    c.execute("UPDATE inventory SET is_upgraded = 1 WHERE id = ?", (inv_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-@app.post('/api/send_gift')
-@auth()
-def send_gift():
-    b = body()
-    if g.u['frozen']:
-        return err('Аккаунт заморожен', 403)
-    to = str(b.get('to_user', '')).strip()
-    it = q('SELECT * FROM inventory WHERE id=? AND user_id=?', (b.get('inventory_id'), g.u['id']), one=True)
-    if not it:
-        return err('Подарок не найден')
-    if to == g.u['id'] or not q('SELECT 1 FROM users WHERE id=?', (to,), one=True):
-        return err('Получатель не найден')
-    x('UPDATE inventory SET user_id=?, showcase=0 WHERE id=?', (to, it['id']))
-    return jsonify(success=True)
+# --- АДМИНКА ---
+@app.route('/api/admin/give', methods=['POST'])
+def admin_give():
+    data = request.json
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT is_admin FROM users WHERE id = ?", (data.get('admin_id'),))
+    admin = c.fetchone()
+    
+    if not admin or admin['is_admin'] != 1:
+        conn.close()
+        return jsonify({"success": False, "error": "Нет прав"}), 403
+        
+    c.execute("UPDATE users SET stars = stars + ? WHERE id = ?", (data.get('amount', 0), data.get('target_id')))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-
-@app.post('/api/showcase')
-@auth()
-def showcase():
-    b = body()
-    it = q('SELECT * FROM inventory WHERE id=? AND user_id=?', (b.get('inventory_id'), g.u['id']), one=True)
-    if not it:
-        return err('Подарок не найден')
-    on = int(bool(b.get('on')))
-    if on and q('SELECT COUNT(*) c FROM inventory WHERE user_id=? AND showcase=1', (g.u['id'],), one=True)['c'] >= 6:
-        return err('В витрине максимум 6 подарков')
-    x('UPDATE inventory SET showcase=? WHERE id=?', (on, it['id']))
-    return jsonify(success=True)
-
-
-@app.get('/api/messages')
-@auth()
-def messages():
-    after = request.args.get('after', type=int, default=0)
-    rows = q('''SELECT * FROM (SELECT m.id,m.text,m.ts,u.id uid,u.name,u.name_color FROM messages m
-                JOIN users u ON u.id=m.user_id WHERE m.id>? ORDER BY m.id DESC LIMIT 50) ORDER BY id''', (after,))
-    return jsonify([dict(r) for r in rows])
-
-
-@app.post('/api/messages')
-@auth()
-def send_message():
-    if g.u['frozen']:
-        return err('Аккаунт заморожен', 403)
-    t = (body().get('text') or '').strip()[:1000]
-    if not t:
-        return err('Пустое сообщение')
-    return jsonify(success=True, id=x('INSERT INTO messages(user_id,text) VALUES(?,?)', (g.u['id'], t)))
-
-
-# ---------- админка ----------
-@app.post('/api/admin/give_stars')
-@auth(admin=True)
-def give_stars():
-    b = body()
-    cur = b.get('currency', 'stars')
-    if cur not in ('stars', 'ton', 'gram'):
-        return err('Неверная валюта')
-    if not q('SELECT 1 FROM users WHERE id=?', (b.get('target_id'),), one=True):
-        return err('Пользователь не найден')
-    x(f'UPDATE users SET {cur}={cur}+? WHERE id=?', (float(b.get('amount', 0)), b.get('target_id')))
-    return jsonify(success=True)
-
-
-@app.post('/api/admin/give_gift')
-@auth(admin=True)
-def give_gift():
-    b = body()
-    gf = q('SELECT * FROM gifts WHERE id=?', (b.get('gift_id'),), one=True)
-    if not gf or not q('SELECT 1 FROM users WHERE id=?', (b.get('target_id'),), one=True):
-        return err('Подарок или пользователь не найден')
-    n = gf['minted'] + 1
-    x('UPDATE gifts SET minted=? WHERE id=?', (n, gf['id']))
-    x('INSERT INTO inventory(user_id,gift_id,number) VALUES(?,?,?)', (b['target_id'], gf['id'], n))
-    return jsonify(success=True)
-
-
-@app.post('/api/admin/freeze')
-@auth(admin=True)
-def freeze():
-    b = body()
-    if b.get('target_id') == g.u['id']:
-        return err('Нельзя заморозить себя')
-    x('UPDATE users SET frozen=? WHERE id=?', (int(bool(b.get('frozen'))), b.get('target_id')))
-    return jsonify(success=True)
-
-
-@app.post('/api/admin/add_gift')
-@auth(admin=True)
-def add_gift():
-    b = body()
-    name, emoji = (b.get('name') or '').strip()[:40], (b.get('emoji') or '').strip()[:8]
-    if not name or not emoji:
-        return err('Заполни название и символ')
-    t = b.get('gift_type') if b.get('gift_type') in ('regular', 'market') else 'regular'
-    x('INSERT INTO gifts(name,emoji,price,gift_type,supply) VALUES(?,?,?,?,?)',
-      (name, emoji, int(b.get('price') or 100), t, int(b.get('supply') or 0)))
-    return jsonify(success=True)
-
-
-init()
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
