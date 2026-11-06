@@ -1,4 +1,4 @@
-"""from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sqlite3
 import random
@@ -16,95 +16,84 @@ def get_db():
 def init_db():
     conn = get_db()
     c = conn.cursor()
-    # Юзеры
+    
+    # 1. Таблица пользователей
     c.execute("""CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY, name TEXT, username TEXT,
-        stars INTEGER DEFAULT 1000, ton REAL DEFAULT 0,
-        is_admin INTEGER DEFAULT 0, is_frozen INTEGER DEFAULT 0,
-        anon_number TEXT DEFAULT NULL, labels TEXT DEFAULT 'Нет'
-    )""")
-    # Подарки
-    c.execute("""CREATE TABLE IF NOT EXISTS gifts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT, emoji TEXT, price INTEGER,
-        gift_type TEXT DEFAULT 'regular',
-        upgrade_cost INTEGER DEFAULT 0
-    )""")
-    # Инвентарь
-    c.execute("""CREATE TABLE IF NOT EXISTS inventory (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT, gift_id INTEGER,
-        is_upgraded INTEGER DEFAULT 0,
-        gift_number INTEGER
-    )""")
-    # Коды для входа
-    c.execute("""CREATE TABLE IF NOT EXISTS auth_codes (
-        phone TEXT PRIMARY KEY, code TEXT
+        id TEXT PRIMARY KEY, 
+        name TEXT, 
+        stars INTEGER DEFAULT 1000, 
+        ton REAL DEFAULT 0, 
+        is_admin INTEGER DEFAULT 0, 
+        is_frozen INTEGER DEFAULT 0
     )""")
     
-    # Добавляем стартовые подарки, если пусто
+    # 2. Таблица для кодов входа
+    c.execute("""CREATE TABLE IF NOT EXISTS auth_codes (
+        phone TEXT PRIMARY KEY, 
+        code TEXT
+    )""")
+    
+    # 3. Таблица подарков
+    c.execute("""CREATE TABLE IF NOT EXISTS gifts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        name TEXT, 
+        emoji TEXT, 
+        price INTEGER, 
+        gift_type TEXT DEFAULT 'regular'
+    )""")
+    
+    # 4. Таблица инвентаря (купленные подарки)
+    c.execute("""CREATE TABLE IF NOT EXISTS inventory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        user_id TEXT, 
+        gift_id INTEGER, 
+        is_upgraded INTEGER DEFAULT 0
+    )""")
+    
+    # Заполняем магазин подарками, если он пустой
     c.execute("SELECT COUNT(*) FROM gifts")
     if c.fetchone()[0] == 0:
         gifts = [
-            # --- ОБЫЧНЫЕ (Regular) ---
-            ("Сердце с бантом","❤️",15,"regular",0),
-            ("Подарочная коробка","🎁",25,"regular",0),
-            ("Роза","🌹",25,"regular",0),
-            ("Шампанское","🍾",50,"regular",0),
-            ("Мишка с тыквой","🐻",50,"regular",0),
-            ("Торт","🎂",50,"regular",0),
-            ("Букет","💐",50,"regular",0),
-            ("Ракета","🚀",50,"regular",0),
-            ("Кубок","🏆",100,"regular",0),
-            ("Кольцо с бриллиантом","💍",100,"regular",0),
-            ("Бриллиант","💎",100,"regular",0),
-            
-            # --- МАРКЕТ (Market) ---
-            ("Мороженое рожок","🍦",300,"market",100),
-            ("Статуя Свободы","🗽",565,"market",200),
-            ("Фонарь","🏮",499,"market",200),
-            ("Собака-рэпер","🐕",565,"market",200),
-            ("Лапша","🍜",438,"market",150),
-            ("Радужный леденец","🍭",450,"market",150),
-            ("Эскимо","🍫",464,"market",150),
-            ("Фламинго-круг","🦩",460,"market",150),
-            ("Рюкзак","🎒",526,"market",200),
-            ("Какашка","💩",500,"market",200),
-            ("2025 год","🎊",399,"market",100),
-            ("Корона шута","🎭",470,"market",150),
-            ("Пряничное сердце","🍪",565,"market",200),
-            ("Пасхальный кролик","🐣",565,"market",200),
-            ("Медаль","🥇",532,"market",200),
-            ("Световой меч","⚔️",565,"market",200),
-            ("Котик в сердце","🐱",1451,"market",500),
-            ("Пепе","🐸",626336,"market",100000),
-            ("Маска Джейсона","😨",4030993,"market",500000),
-            ("Кулон-луна","🌙",565,"market",200),
-            ("Пионы","🌸",564,"market",200),
-            ("Гриб","🍄",565,"market",200),
-            ("Глинтвейн","🍷",500,"market",200),
-            ("Доска для сёрфинга","🏄",643,"market",250),
-            ("Шляпа ведьмы","🧙",770,"market",300),
-            ("Сакура","🌸",1016,"market",400),
-            ("Рождественский венок","🎄",530,"market",200),
-            ("Клубника в коробке","🍓",852,"market",350),
-            ("Снежный шар","❄️",624,"market",250),
-            
-            # --- ПРОДАННЫЕ (Sold) ---
-            ("Конь","🐴",0,"sold",0),
-            ("Надгробие RIP","🪦",15000,"sold",0),
-            ("Гроб","⚰️",5000,"sold",0),
-            ("Персонаж","🦸",41000,"sold",0),
-            ("Кроссовки","👟",10000,"sold",0),
-            ("Портфель","💼",5000,"sold",0)
+            # Обычные
+            ("Сердце", "❤️", 15, "regular"), 
+            ("Мишка", "🧸", 50, "regular"),
+            ("Ракета", "🚀", 50, "regular"), 
+            ("Кубок", "🏆", 100, "regular"),
+            ("Кольцо", "💍", 100, "regular"), 
+            ("Алмаз", "💎", 100, "regular"),
+            # Маркет (NFT)
+            ("Пепе", "🐸", 1000, "market"), 
+            ("Котик", "🐱", 1451, "market"),
+            ("Световой меч", "⚔️", 565, "market")
         ]
-        c.executemany("INSERT INTO gifts (name, emoji, price, gift_type, upgrade_cost) VALUES (?, ?, ?, ?, ?)", gifts)
+        c.executemany("INSERT INTO gifts (name, emoji, price, gift_type) VALUES (?, ?, ?, ?)", gifts)
+        
     conn.commit()
     conn.close()
 
 init_db()
 
 # --- АВТОРИЗАЦИЯ ---
+
+@app.route('/api/auth/request_code', methods=['POST'])
+def request_code():
+    data = request.json
+    phone = data.get('phone')
+    if not phone: 
+        return jsonify({"success": False, "error": "Введите номер"}), 400
+        
+    code = str(random.randint(1000, 9999))
+    
+    conn = get_db()
+    c = conn.cursor()
+    # Сохраняем код в базу
+    c.execute("INSERT OR REPLACE INTO auth_codes (phone, code) VALUES (?, ?)", (phone, code))
+    conn.commit()
+    conn.close()
+    
+    # ВРЕМЕННО: возвращаем код на сайт, чтобы ты его увидел (потом уберем в бота)
+    return jsonify({"success": True, "test_code": code})
+
 @app.route('/api/auth/verify', methods=['POST'])
 def verify_code():
     data = request.json
@@ -120,32 +109,27 @@ def verify_code():
         conn.close()
         return jsonify({"success": False, "error": "Неверный код"}), 401
         
+    # Проверяем, есть ли юзер, если нет - создаем
     c.execute("SELECT * FROM users WHERE id = ?", (phone,))
     user = c.fetchone()
     if not user:
-        c.execute("INSERT INTO users (id, name) VALUES (?, ?)", (phone, "Игрок"))
+        # Делаем первого зашедшего админом
+        c.execute("SELECT COUNT(*) FROM users")
+        is_admin = 1 if c.fetchone()[0] == 0 else 0
+        c.execute("INSERT INTO users (id, name, is_admin) VALUES (?, ?, ?)", (phone, "Игрок", is_admin))
         conn.commit()
         c.execute("SELECT * FROM users WHERE id = ?", (phone,))
         user = c.fetchone()
         
+    # Удаляем использованный код
     c.execute("DELETE FROM auth_codes WHERE phone = ?", (phone,))
     conn.commit()
     conn.close()
+    
     return jsonify({"success": True, "user": dict(user)})
 
-# --- ЮЗЕР ---
-@app.route('/api/user/<user_id>', methods=['GET'])
-def get_user(user_id):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    user = c.fetchone()
-    conn.close()
-    if user:
-        return jsonify(dict(user))
-    return jsonify({"error": "Не найден"}), 404
-
 # --- МАГАЗИН ---
+
 @app.route('/api/gifts', methods=['GET'])
 def get_gifts():
     conn = get_db()
@@ -163,11 +147,16 @@ def buy_gift():
     
     conn = get_db()
     c = conn.cursor()
+    
     c.execute("SELECT * FROM gifts WHERE id = ?", (gift_id,))
     gift = c.fetchone()
     c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     user = c.fetchone()
     
+    if not user or not gift:
+        conn.close()
+        return jsonify({"success": False, "error": "Ошибка данных"}), 404
+        
     if user['is_frozen'] == 1:
         conn.close()
         return jsonify({"success": False, "error": "Аккаунт заморожен"}), 403
@@ -176,67 +165,48 @@ def buy_gift():
         conn.close()
         return jsonify({"success": False, "error": "Недостаточно звезд"}), 400
         
+    # Списываем звезды и выдаем подарок
     new_balance = user['stars'] - gift['price']
     c.execute("UPDATE users SET stars = ? WHERE id = ?", (new_balance, user_id))
+    c.execute("INSERT INTO inventory (user_id, gift_id) VALUES (?, ?)", (user_id, gift_id))
     
-    # Генерируем номер подарка
-    c.execute("SELECT COUNT(*) FROM inventory WHERE gift_id = ?", (gift_id,))
-    gift_num = c.fetchone()[0] + 1
-    
-    c.execute("INSERT INTO inventory (user_id, gift_id, gift_number) VALUES (?, ?, ?)", (user_id, gift_id, gift_num))
     conn.commit()
     conn.close()
     return jsonify({"success": True, "new_balance": new_balance})
 
-# --- УЛУЧШЕНИЕ ---
-@app.route('/api/upgrade_gift', methods=['POST'])
-def upgrade_gift():
-    data = request.json
-    user_id = data.get('user_id')
-    inv_id = data.get('inv_id')
-    
+# --- ИНВЕНТАРЬ ---
+
+@app.route('/api/inventory/<user_id>', methods=['GET'])
+def get_inventory(user_id):
     conn = get_db()
     c = conn.cursor()
-    c.execute("""SELECT i.id, g.upgrade_cost, i.is_upgraded 
-                 FROM inventory i JOIN gifts g ON i.gift_id = g.id 
-                 WHERE i.id = ? AND i.user_id = ?""", (inv_id, user_id))
-    item = c.fetchone()
-    
-    if not item:
-        conn.close()
-        return jsonify({"success": False, "error": "Подарок не найден"}), 404
-        
-    if item['is_upgraded'] == 1:
-        conn.close()
-        return jsonify({"success": False, "error": "Уже улучшен"}), 400
-        
-    c.execute("SELECT stars FROM users WHERE id = ?", (user_id,))
-    user = c.fetchone()
-    
-    if user['stars'] < item['upgrade_cost']:
-        conn.close()
-        return jsonify({"success": False, "error": "Недостаточно звезд"}), 400
-        
-    c.execute("UPDATE users SET stars = stars - ? WHERE id = ?", (item['upgrade_cost'], user_id))
-    c.execute("UPDATE inventory SET is_upgraded = 1 WHERE id = ?", (inv_id,))
-    conn.commit()
+    c.execute("""SELECT i.id, g.name, g.emoji, g.gift_type 
+                 FROM inventory i 
+                 JOIN gifts g ON i.gift_id = g.id 
+                 WHERE i.user_id = ?""", (user_id,))
+    items = [dict(row) for row in c.fetchall()]
     conn.close()
-    return jsonify({"success": True})
+    return jsonify(items)
 
 # --- АДМИНКА ---
+
 @app.route('/api/admin/give', methods=['POST'])
 def admin_give():
     data = request.json
+    admin_id = data.get('admin_id')
+    target_id = data.get('target_id')
+    amount = data.get('amount')
+    
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT is_admin FROM users WHERE id = ?", (data.get('admin_id'),))
+    c.execute("SELECT is_admin FROM users WHERE id = ?", (admin_id,))
     admin = c.fetchone()
     
     if not admin or admin['is_admin'] != 1:
         conn.close()
-        return jsonify({"success": False, "error": "Нет прав"}), 403
+        return jsonify({"success": False, "error": "Доступ запрещен"}), 403
         
-    c.execute("UPDATE users SET stars = stars + ? WHERE id = ?", (data.get('amount', 0), data.get('target_id')))
+    c.execute("UPDATE users SET stars = stars + ? WHERE id = ?", (amount, target_id))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
