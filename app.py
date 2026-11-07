@@ -66,19 +66,48 @@ def local_brain(text, mode, level):
     if "помощь" in t or t in ("help", "/help", "что умеешь"):
         return ("Я умею: отвечать на вопросы, писать код, переводить тексты (скажи «переведи ... на французский»), "
                 "считать выражения, шутить. В панели слева — генерация картинок, анализ фото, Deep Search и пранки.")
-    # пранк через чат
-    for key, p in [("матриц", "matrix"), ("синий экран", "bsod"), ("bsod", "bsod"),
-                   ("симулятор хакера", "hacker"), ("хакер сим", "hacker"),
-                   ("таймер удаления", "timer"), ("бегающая кнопка", "runbutton"),
-                   ("локер", "locker"), ("вас заметили", "locker")]:
-        if key in t:
-            return json.dumps({"prank": p, "say": "Запускаю пранк «%s». Ничего страшного — это безопасная симуляция." % key})
+    
+    # --- ИСПРАВЛЕННЫЙ БЛОК ПРАНКОВ (ВЫДАЧА КОДА В ЧАТ) ---
+    if any(w in t for w in ["матриц", "синий экран", "bsod", "симулятор хакера", "хакер сим", "таймер удаления", "бегающая кнопка", "локер", "вас заметили"]):
+        if "локер" in t or "вас заметили" in t:
+            code = random.randint(1000, 9999)
+            prank_html = f"""<!-- БЕЗОПАСНАЯ ШУТКА: Локер -->
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Вас заметили</title></head>
+<body style="margin:0;background:#0a0a12;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#ff4757;font-family:monospace;text-align:center">
+  <h2 style="font-size:40px;text-shadow:0 0 20px #ff4757">ВАС ЗАМЕТИЛИ!</h2>
+  <p>Ваше устройство заблокировано.<br>Введите код разблокировки:</p>
+  <input type="text" id="code" style="font-size:24px;text-align:center;background:#000;border:1px solid #ff4757;color:#0f0;padding:10px;border-radius:8px;outline:none;width:200px" maxlength="4">
+  <button onclick="check()" style="margin-top:20px;padding:10px 20px;background:#ff4757;color:white;border:none;border-radius:8px;font-size:18px;cursor:pointer">Разблокировать</button>
+  <script>
+    function check() {{
+      if (document.getElementById('code').value == '{code}') {{
+        document.body.innerHTML = '<h1 style="color:#0f0">Разблокировано!</h1>';
+      }} else {{
+        alert('Неверный код!');
+      }}
+    }}
+  </script>
+</body>
+</html>"""
+            return f"Лови код локера. Скопируй его в файл `index.html` и открой в браузере. Код для разблокировки: **{code}**\n\n```html\n{prank_html}\n```"
+        
+        elif "матриц" in t:
+            return "Вот код для пранка «Матрица»:\n\n```html\n<!DOCTYPE html><html><body style='margin:0;background:#000;overflow:hidden'><canvas id='c'></canvas><script>const c=document.getElementById('c'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;const chars='アイウエオ01АКСОNИ',cols=Math.floor(c.width/16),drops=Array(cols).fill(1);setInterval(()=>{x.fillStyle='rgba(0,0,0,0.08)';x.fillRect(0,0,c.width,c.height);x.fillStyle='#0f0';x.font='16px monospace';drops.forEach((y,i)=>{x.fillText(chars[Math.floor(Math.random()*chars.length)],i*16,y*16);drops[i]=y*16>c.height&&Math.random()>0.97?0:y+1;});},50);</script></body></html>\n```"
+        
+        elif "синий экран" in t or "bsod" in t:
+            return "Вот код для пранка «Синий экран»:\n\n```html\n<!DOCTYPE html><html><body style='margin:0;background:#0078D7;color:white;font-family:sans-serif;height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column'><div style='font-size:100px;'>:(</div><div style='font-size:24px;margin-top:20px;'>Ваш ПК столкнулся с проблемой.</div></body></html>\n```"
+        
+        elif "симулятор хакера" in t or "хакер" in t:
+            return "Вот код для пранка «Симулятор хакера»:\n\n```html\n<!DOCTYPE html><html><body style='margin:0;background:#000;color:#0f0;font-family:monospace;padding:20px;overflow:hidden'><div id='t'></div><script>const chars='01ABCDEF@#$%&*';setInterval(()=>{document.getElementById('t').innerText+=' '+Array.from({length:10},()=>chars[Math.floor(Math.random()*chars.length)]).join('');},50);</script></body></html>\n```"
+
     # код на питоне
     if re.search(r"\b(напиши|напишите)\b.*\b(код|функци|скрипт)\b", t) or "питон" in t:
         return ("Вот пример функции на Python:\n\n```python\ndef hello(name):\n    return f\"Привет, {name}! Добро пожаловать в AxonAI.\"\n\nprint(hello(\"мир\"))\n```\n\nХочешь код под конкретную задачу — опиши её подробнее.")
     # дефолт
     base = ("Я локальная модель AxonAI (сервер работает без OPENROUTER_API_KEY), поэтому мои ответы ограничены. "
-            "Но я умею: считать выражения, переводить («переведи ... на немецкий»), шутить, показывать время и запускать пранки. "
+            "Но я умею: считать выражения, переводить («переведи ... на немецкий»), шутить, показывать время и выдавать коды пранков. "
             "Для полноценных ответов добавь ключ OPENROUTER_API_KEY на Render.")
     if mode == "hacker":
         base = "[OFFLINE MODE] " + base
@@ -149,15 +178,10 @@ def chat():
                 return jsonify({"reply": r.json()["choices"][0]["message"]["content"], "engine": "openrouter"})
         except Exception:
             pass
+    
+    # Если ключа нет, или он не сработал, используем локальный мозг
     reply = local_brain(last_user, mode, level)
-    engine = "local"
-    try:
-        parsed = json.loads(reply)
-        if isinstance(parsed, dict) and "prank" in parsed:
-            return jsonify({"reply": parsed.get("say", "Запускаю пранк."), "engine": "local", "prank": parsed["prank"]})
-    except Exception:
-        pass
-    return jsonify({"reply": reply, "engine": engine})
+    return jsonify({"reply": reply, "engine": "local"})
 
 @app.route("/api/search", methods=["POST"])
 def search():
