@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-AnoxGram — backend (Flask + SQLite/PostgreSQL) ИСПРАВЛЕННЫЙ
-"""
 import os, re, json, hmac, hashlib, secrets, sqlite3, datetime
 from flask import Flask, request, jsonify, g
 try:
@@ -17,7 +14,7 @@ except ImportError:
     USE_PG = False
 
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "anox-admin-change-me")
-BOT_STAR_PRICE = 100  # 100 GRAM = 1 Telegram Star
+BOT_STAR_PRICE = 100
 
 app = Flask(__name__)
 if CORS:
@@ -66,79 +63,57 @@ def all_(sql, args=()):
     return [dict(r) for r in run(sql, args).fetchall()]
 
 def init_db():
-    # Упрощенная схема для совместимости
     schema = """
     CREATE TABLE IF NOT EXISTS users(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE, pass_hash TEXT, salt TEXT,
-      display_id INTEGER UNIQUE, nickname TEXT, bio TEXT DEFAULT '',
-      avatar_color TEXT DEFAULT '#5a5ae6', avatar_emoji TEXT DEFAULT '',
-      banner TEXT DEFAULT '', is_premium INTEGER DEFAULT 0,
-      labels TEXT DEFAULT '[]', badges TEXT DEFAULT '[]',
-      nick_color TEXT DEFAULT '#ffffff', nick_font TEXT DEFAULT 'Inter',
-      stars INTEGER DEFAULT 100, gram INTEGER DEFAULT 100,
-      level INTEGER DEFAULT 1, gift_level INTEGER DEFAULT 0,
-      hidden_id INTEGER DEFAULT 0, frozen INTEGER DEFAULT 0,
-      accent TEXT DEFAULT '#6c5ce7', effect TEXT DEFAULT '',
-      clan_id INTEGER DEFAULT 0, clan_role TEXT DEFAULT '',
-      created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, pass_hash TEXT, salt TEXT,
+      display_id INTEGER UNIQUE, nickname TEXT, bio TEXT DEFAULT '', avatar_color TEXT DEFAULT '#5a5ae6',
+      avatar_emoji TEXT DEFAULT '', banner TEXT DEFAULT '', is_premium INTEGER DEFAULT 0,
+      labels TEXT DEFAULT '[]', badges TEXT DEFAULT '[]', nick_color TEXT DEFAULT '#ffffff',
+      nick_font TEXT DEFAULT 'Inter', stars INTEGER DEFAULT 100, gram INTEGER DEFAULT 100,
+      level INTEGER DEFAULT 1, gift_level INTEGER DEFAULT 0, hidden_id INTEGER DEFAULT 0,
+      frozen INTEGER DEFAULT 0, accent TEXT DEFAULT '#6c5ce7', effect TEXT DEFAULT '',
+      clan_id INTEGER DEFAULT 0, clan_role TEXT DEFAULT '', created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS transactions(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      from_id INTEGER, to_id INTEGER, amount INTEGER, currency TEXT,
-      kind TEXT, note TEXT DEFAULT '', created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, from_id INTEGER, to_id INTEGER, amount INTEGER,
+      currency TEXT, kind TEXT, note TEXT DEFAULT '', created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS gifts(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT, rarity TEXT DEFAULT 'common', model TEXT DEFAULT 'cube',
-      bg TEXT DEFAULT 'linear-gradient(135deg,#667eea,#764ba2)',
-      is_nft INTEGER DEFAULT 0, owner_id INTEGER, from_id INTEGER DEFAULT 0,
-      price INTEGER DEFAULT 0, upgrade_level INTEGER DEFAULT 0,
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rarity TEXT DEFAULT 'common', model TEXT DEFAULT 'cube',
+      bg TEXT DEFAULT 'linear-gradient(135deg,#667eea,#764ba2)', is_nft INTEGER DEFAULT 0,
+      owner_id INTEGER, from_id INTEGER DEFAULT 0, price INTEGER DEFAULT 0, upgrade_level INTEGER DEFAULT 0,
       unique_key TEXT DEFAULT '', created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS market(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      gift_id INTEGER, seller_id INTEGER, price INTEGER, sold INTEGER DEFAULT 0,
-      created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, gift_id INTEGER, seller_id INTEGER, price INTEGER,
+      sold INTEGER DEFAULT 0, created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS chats(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT DEFAULT 'group', title TEXT, username TEXT DEFAULT '',
-      owner_id INTEGER, admins TEXT DEFAULT '[]', public INTEGER DEFAULT 1,
-      slow_mode INTEGER DEFAULT 0, pinned TEXT DEFAULT '', about TEXT DEFAULT '',
-      boosts INTEGER DEFAULT 0, link_key TEXT DEFAULT '', created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT DEFAULT 'group', title TEXT, username TEXT DEFAULT '',
+      owner_id INTEGER, admins TEXT DEFAULT '[]', public INTEGER DEFAULT 1, slow_mode INTEGER DEFAULT 0,
+      pinned TEXT DEFAULT '', about TEXT DEFAULT '', boosts INTEGER DEFAULT 0, link_key TEXT DEFAULT '', created_at TEXT
     );
-    CREATE TABLE IF NOT EXISTS chat_members(
-      chat_id INTEGER, user_id INTEGER, muted INTEGER DEFAULT 0
-    );
+    CREATE TABLE IF NOT EXISTS chat_members(chat_id INTEGER, user_id INTEGER, muted INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS messages(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      chat_id INTEGER, user_id INTEGER, text TEXT, kind TEXT DEFAULT 'text',
-      created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, user_id INTEGER, text TEXT,
+      kind TEXT DEFAULT 'text', created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS bots(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      owner_id INTEGER, name TEXT, username TEXT UNIQUE, token TEXT, about TEXT DEFAULT '',
-      created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, name TEXT, username TEXT UNIQUE,
+      token TEXT, about TEXT DEFAULT '', created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS clans(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT, tag TEXT, emblem TEXT, color TEXT, badge TEXT,
-      owner_id INTEGER, members TEXT DEFAULT '{}', link_key TEXT UNIQUE,
-      created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, tag TEXT, emblem TEXT, color TEXT, badge TEXT,
+      owner_id INTEGER, members TEXT DEFAULT '{}', link_key TEXT UNIQUE, created_at TEXT
     );
     CREATE TABLE IF NOT EXISTS numbers(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      display_id INTEGER UNIQUE, owner_id INTEGER, anonymous INTEGER DEFAULT 0,
-      price INTEGER DEFAULT 0
+      id INTEGER PRIMARY KEY AUTOINCREMENT, display_id INTEGER UNIQUE, owner_id INTEGER,
+      anonymous INTEGER DEFAULT 0, price INTEGER DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS logs(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      admin TEXT, action TEXT, detail TEXT, created_at TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, admin TEXT, action TEXT, detail TEXT, created_at TEXT
     );
-    CREATE TABLE IF NOT EXISTS settings_kv(
-      key TEXT PRIMARY KEY, value TEXT
-    );
+    CREATE TABLE IF NOT EXISTS settings_kv(key TEXT PRIMARY KEY, value TEXT);
     """
     d = db()
     for stmt in schema.strip().split(";"):
@@ -150,15 +125,11 @@ with app.app_context():
     init_db()
 
 NOW = lambda: datetime.datetime.utcnow().isoformat(timespec="seconds")
-
-def h(pw, salt):
-    return hashlib.sha256((salt + pw).encode()).hexdigest()
-
+def h(pw, salt): return hashlib.sha256((salt + pw).encode()).hexdigest()
 def new_display_id():
     while True:
         n = secrets.randbelow(900000) + 100000
-        if not one("SELECT id FROM users WHERE display_id=?", (n,)):
-            return n
+        if not one("SELECT id FROM users WHERE display_id=?", (n,)): return n
 
 def public_user(u, viewer=None):
     if not u: return None
@@ -217,7 +188,6 @@ def make_gift(owner_id, from_id=0, name=None, rarity="common", is_nft=False, pri
          "NFT-" + secrets.token_hex(6).upper() if is_nft else "", NOW()), commit=True)
     return one("SELECT * FROM gifts ORDER BY id DESC LIMIT 1")
 
-# ---------------- AUTH ----------------
 @app.post("/api/register")
 def register():
     d = request.get_json(force=True)
@@ -234,12 +204,10 @@ def register():
     uid = new_display_id()
     run("""INSERT INTO users(username,pass_hash,salt,display_id,nickname,labels,stars,gram,created_at)
            VALUES(?,?,?,?,?,?,?,?,?)""",
-        (username, h(password, salt), salt, uid, nickname,
-         json.dumps(["Новичок"]), 100, 100, NOW()), commit=True)
+        (username, h(password, salt), salt, uid, nickname, json.dumps(["Новичок"]), 100, 100, NOW()), commit=True)
     u = one("SELECT * FROM users WHERE username=?", (username,))
     token = secrets.token_hex(24)
     run("INSERT OR REPLACE INTO settings_kv(key,value) VALUES(?,?)", ("tok:" + token, str(u["id"])), commit=True)
-    # автоподписка на официальный канал
     ch = one("SELECT id FROM chats WHERE username='anoxgram'")
     if ch:
         run("INSERT OR IGNORE INTO chat_members(chat_id,user_id) VALUES(?,?)", (ch["id"], u["id"]), commit=True)
@@ -272,7 +240,6 @@ def logout():
     if t: run("DELETE FROM settings_kv WHERE key=?", ("tok:" + t,), commit=True)
     return jsonify({"ok": True})
 
-# ---------------- PROFILE ----------------
 @app.post("/api/profile")
 def profile_update():
     u, _ = get_user_by_token()
@@ -283,8 +250,7 @@ def profile_update():
     for k in allowed:
         if k in d:
             v = d[k]
-            if k in ("avatar_color", "nick_color", "accent") and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(v)):
-                continue
+            if k in ("avatar_color", "nick_color", "accent") and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(v)): continue
             if k in ("hidden_id",): v = 1 if v else 0
             run(f"UPDATE users SET {k}=? WHERE id=?", (str(v)[:200], u["id"]))
     db().commit()
@@ -301,7 +267,6 @@ def user_page(username):
     return jsonify({"user": public_user(u, viewer), "gifts": gifts,
                     "clan": {k: clan[k] for k in ("name", "tag", "color", "badge")} if clan else None})
 
-# ---------------- WALLET ----------------
 @app.get("/api/wallet")
 def wallet():
     u, _ = get_user_by_token()
@@ -377,7 +342,6 @@ def buy_stars():
     tx(u["id"], u["id"], amount, "stars", "purchase", f"Покупка ({cost} GRAM)")
     return jsonify({"ok": True, "stars": u["stars"] + amount})
 
-# ---------------- GIFTS ----------------
 @app.get("/api/gifts/catalog")
 def gift_catalog():
     return jsonify({"models": GIFT_MODELS, "backgrounds": GIFT_BGS,
@@ -435,8 +399,7 @@ def craft():
     if len(nfts) != 4: return jsonify({"error": "Проверьте владение"}), 400
     for i in ids:
         run("DELETE FROM gifts WHERE id=?", (i,))
-    unique = make_gift(u["id"], 0, "Уникальный " + secrets.token_hex(3).upper(),
-                       "legendary", True, 20000)
+    unique = make_gift(u["id"], 0, "Уникальный " + secrets.token_hex(3).upper(), "legendary", True, 20000)
     run("UPDATE gifts SET unique_key=? WHERE id=?", ("UNIQ-" + secrets.token_hex(8).upper(), unique["id"]), commit=True)
     tx(u["id"], u["id"], 0, "stars", "craft", "Крафт")
     return jsonify({"gift": one("SELECT * FROM gifts WHERE id=?", (unique["id"],))})
@@ -477,7 +440,6 @@ def market_buy(mid):
     tx(u["id"], m["seller_id"], m["price"], "stars", "market", f"Лот #{mid}")
     return jsonify({"ok": True})
 
-# ---------------- CHATS ----------------
 def chat_dict(c):
     d = dict(c)
     d["admins"] = json.loads(d.get("admins") or "[]")
@@ -544,4 +506,31 @@ def chat_message(cid):
     if c["type"] == "channel" and not is_admin:
         return jsonify({"error": "Только админы"}), 403
     if c["slow_mode"] > 0 and not is_admin:
-        last = one("SELECT created_at FROM messages WHERE chat_id=? AND user_id=? ORDER BY id DESC LIMIT 1", (
+        last = one("SELECT created_at FROM messages WHERE chat_id=? AND user_id=? ORDER BY id DESC LIMIT 1", (cid, u["id"]))
+        if last:
+            dt = (datetime.datetime.utcnow() - datetime.datetime.fromisoformat(last["created_at"])).total_seconds()
+            if dt < c["slow_mode"]:
+                return jsonify({"error": f"Медленный режим: подождите {int(c['slow_mode'] - dt)}с"}), 429
+    d = request.get_json(force=True)
+    run("INSERT INTO messages(chat_id,user_id,text,created_at) VALUES(?,?,?,?)",
+        (cid, u["id"], (d.get("text") or "")[:2000], NOW()), commit=True)
+    return jsonify({"ok": True})
+
+@app.post("/api/chats/<int:cid>/settings")
+def chat_settings(cid):
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    c = one("SELECT * FROM chats WHERE id=?", (cid,))
+    if not c or (u["id"] != c["owner_id"] and u["id"] not in json.loads(c.get("admins") or "[]")):
+        return jsonify({"error": "Нет прав"}), 403
+    d = request.get_json(force=True)
+    if "public" in d: run("UPDATE chats SET public=? WHERE id=?", (1 if d["public"] else 0, cid))
+    if "slow_mode" in d: run("UPDATE chats SET slow_mode=? WHERE id=?", (max(0, int(d["slow_mode"])), cid))
+    if "title" in d: run("UPDATE chats SET title=? WHERE id=?", (str(d["title"])[:64], cid))
+    if "pinned" in d: run("UPDATE chats SET pinned=? WHERE id=?", (str(d["pinned"])[:200], cid))
+    if "admins" in d:
+        ids = [int(x) for x in d["admins"]][:20]
+        run("UPDATE chats SET admins=? WHERE id=?", (json.dumps(ids), cid))
+    if "username" in d:
+        un = str(d["username"]).lower()[:32]
+        if one("SELECT id FROM chats WHERE username=? AND id!=?",
