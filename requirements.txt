@@ -1,4 +1,7 @@
 Flask
-flask-cors
-psycopg2-binary
+requests
+beautifulsoup4
+deep-translator
+duckduckgo-search
+python-dotenv
 gunicorn
