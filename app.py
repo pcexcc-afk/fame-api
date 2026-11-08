@@ -533,4 +533,217 @@ def chat_settings(cid):
         run("UPDATE chats SET admins=? WHERE id=?", (json.dumps(ids), cid))
     if "username" in d:
         un = str(d["username"]).lower()[:32]
-        if one("SELECT id FROM chats WHERE username=? AND id!=?",
+        if one("SELECT id FROM chats WHERE username=? AND id!=?", (un, cid)):
+            return jsonify({"error": "Юзернейм занят"}), 409
+        run("UPDATE chats SET username=? WHERE id=?", (un, cid))
+    db().commit()
+    return jsonify({"chat": chat_dict(one("SELECT * FROM chats WHERE id=?", (cid,)))})
+
+@app.post("/api/chats/<int:cid>/boost")
+def chat_boost(cid):
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    c = one("SELECT * FROM chats WHERE id=?", (cid,))
+    if not c: return jsonify({"error": "Не найден"}), 404
+    if u["stars"] < 50: return jsonify({"error": "Буст стоит 50 звёзд"}), 400
+    change_balance(u["id"], "stars", -50)
+    run("UPDATE chats SET boosts=boosts+1 WHERE id=?", (cid,), commit=True)
+    tx(u["id"], 0, 50, "stars", "boost", f"Буст {c['title']}")
+    return jsonify({"ok": True})
+
+@app.get("/api/bots")
+def bots_list():
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    return jsonify({"bots": all_("SELECT * FROM bots WHERE owner_id=?", (u["id"],))})
+
+@app.post("/api/bots")
+def bot_create():
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    d = request.get_json(force=True)
+    name, uname = (d.get("name") or "Бот")[:32], (d.get("username") or "").lower()
+    if not re.fullmatch(r"[a-z0-9_]{3,32}", uname or ""):
+        return jsonify({"error": "Юзернейм бота: 3–32, a-z 0-9 _"}), 400
+    if one("SELECT id FROM bots WHERE username=?", (uname,)):
+        return jsonify({"error": "Юзернейм занят"}), 409
+    if u["gram"] < 100: return jsonify({"error": "Создание бота стоит 100 GRAM"}), 400
+    token = str(u["id"]) + ":" + secrets.token_hex(16)
+    change_balance(u["id"], "gram", -100)
+    run("INSERT INTO bots(owner_id,name,username,token,about,created_at) VALUES(?,?,?,?,?,?)",
+        (u["id"], name, uname, token, d.get("about", "")[:200], NOW()), commit=True)
+    tx(u["id"], 0, 100, "gram", "bot", f"Создан бот @{uname}")
+    return jsonify({"bot": one("SELECT * FROM bots WHERE token=?", (token,))})
+
+@app.get("/api/clans")
+def clans_list():
+    rows = all_("SELECT * FROM clans ORDER BY id DESC")
+    for r in rows:
+        r["members"] = json.loads(r.get("members") or "{}")
+        r["members_count"] = len(r["members"])
+        r.pop("members", None)
+    return jsonify({"clans": rows})
+
+@app.post("/api/clans")
+def clan_create():
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    d = request.get_json(force=True)
+    if u["stars"] < 50000: return jsonify({"error": "Создание клана стоит 50 000 звёзд"}), 400
+    name = (d.get("name") or "Клан")[:32]
+    if one("SELECT id FROM clans WHERE name=?", (name,)):
+        return jsonify({"error": "Название занято"}), 409
+    change_balance(u["id"], "stars", -50000)
+    link = secrets.token_urlsafe(8)
+    members = {str(u["id"]): "Владелец"}
+    run("""INSERT INTO clans(name,tag,emblem,color,badge,owner_id,members,link_key,created_at)
+           VALUES(?,?,?,?,?,?,?,?,?)""",
+        (name, (d.get("tag") or "CLN")[:5].upper(), d.get("emblem", "shield"),
+         d.get("color", "#5a5ae6"), d.get("badge", ""), u["id"], json.dumps(members), link, NOW()), commit=True)
+    c = one("SELECT * FROM clans ORDER BY id DESC LIMIT 1")
+    run("UPDATE users SET clan_id=?, clan_role='Владелец' WHERE id=?", (c["id"], u["id"]), commit=True)
+    tx(u["id"], 0, 50000, "stars", "clan", f"Создан клан {name}")
+    return jsonify({"clan": dict(c), "invite": "/join-clan/" + link})
+
+@app.get("/api/clans/join/<key>")
+def clan_join(key):
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    c = one("SELECT * FROM clans WHERE link_key=?", (key,))
+    if not c: return jsonify({"error": "Ссылка недействительна"}), 404
+    members = json.loads(c.get("members") or "{}")
+    members[str(u["id"])] = "Участник"
+    run("UPDATE clans SET members=? WHERE id=?", (json.dumps(members), c["id"]), commit=True)
+    run("UPDATE users SET clan_id=?, clan_role='Участник' WHERE id=?", (c["id"], u["id"]), commit=True)
+    return jsonify({"ok": True, "clan": dict(one("SELECT * FROM clans WHERE id=?", (c["id"],)))})
+
+@app.post("/api/clans/<int:cid>/role")
+def clan_role(cid):
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    d = request.get_json(force=True)
+    c = one("SELECT * FROM clans WHERE id=?", (cid,))
+    if not c: return jsonify({"error": "Не найден"}), 404
+    members = json.loads(c.get("members") or "{}")
+    my = members.get(str(u["id"]))
+    target = str(int(d.get("user_id")))
+    if target not in members: return jsonify({"error": "Не участник"}), 404
+    new_role = d.get("role", "Участник")
+    if my == "Владелец":
+        pass
+    elif my == "Со-владелец" and new_role in ("Админ", "Участник") and members[target] in ("Админ", "Участник"):
+        pass
+    elif my == "Админ" and new_role == "Участник" and members[target] == "Участник":
+        pass
+    else:
+        return jsonify({"error": "Нет прав"}), 403
+    if new_role == "Владелец" and my == "Владелец":
+        members[str(u["id"])] = "Со-владелец"
+        run("UPDATE users SET clan_role='Со-владелец' WHERE id=?", (u["id"],))
+        run("UPDATE clans SET owner_id=? WHERE id=?", (int(target), cid))
+    members[target] = new_role
+    run("UPDATE clans SET members=? WHERE id=?", (json.dumps(members), cid))
+    run("UPDATE users SET clan_role=? WHERE id=?", (new_role, int(target)))
+    db().commit()
+    return jsonify({"ok": True})
+
+@app.post("/api/clans/<int:cid>/leave")
+def clan_leave(cid):
+    u, _ = get_user_by_token()
+    if not u: return jsonify({"error": "Не авторизован"}), 401
+    c = one("SELECT * FROM clans WHERE id=?", (cid,))
+    if not c: return jsonify({"error": "Не найден"}), 404
+    members = json.loads(c.get("members") or "{}")
+    if members.get(str(u["id"])) == "Владелец":
+        return jsonify({"error": "Передайте права перед выходом"}), 400
+    members.pop(str(u["id"]), None)
+    run("UPDATE clans SET members=? WHERE id=?", (json.dumps(members), cid))
+    run("UPDATE users SET clan_id=0, clan_role='' WHERE id=?", (u["id"],))
+    db().commit()
+    return jsonify({"ok": True})
+
+@app.post("/api/admin/grant")
+def admin_grant():
+    e = require_admin()
+    if e: return e
+    d = request.get_json(force=True)
+    u = one("SELECT * FROM users WHERE username=? OR display_id=? OR id=?",
+            (str(d.get("user", "")).lower(), d.get("user"), d.get("user")))
+    if not u: return jsonify({"error": "Пользователь не найден"}), 404
+    admin = "admin"
+    if d.get("stars"): change_balance(u["id"], "stars", int(d["stars"])); tx(0, u["id"], int(d["stars"]), "stars", "admin", "Выдача админом")
+    if d.get("gram"): change_balance(u["id"], "gram", int(d["gram"])); tx(0, u["id"], int(d["gram"]), "gram", "admin", "Выдача админом")
+    if d.get("premium") is not None: run("UPDATE users SET is_premium=? WHERE id=?", (1 if d["premium"] else 0, u["id"]), commit=True)
+    if d.get("gift"):
+        make_gift(u["id"], 0, d["gift"].get("name"), d["gift"].get("rarity", "common"), d["gift"].get("rarity") == "nft", 0)
+    if d.get("labels") is not None: run("UPDATE users SET labels=? WHERE id=?", (json.dumps(d["labels"], ensure_ascii=False), u["id"]), commit=True)
+    if d.get("badges") is not None: run("UPDATE users SET badges=? WHERE id=?", (json.dumps(d["badges"], ensure_ascii=False), u["id"]), commit=True)
+    if d.get("username"):
+        un = str(d["username"]).lower()
+        if one("SELECT id FROM users WHERE username=?", (un,)): return jsonify({"error": "Ник занят"}), 409
+        run("UPDATE users SET username=? WHERE id=?", (un, u["id"]), commit=True)
+    if d.get("display_id"):
+        n = int(d["display_id"])
+        if one("SELECT id FROM users WHERE display_id=? AND id!=?", (n, u["id"])): return jsonify({"error": "Номер занят"}), 409
+        run("UPDATE users SET display_id=? WHERE id=?", (n, u["id"]), commit=True)
+    if d.get("freeze") is not None:
+        run("UPDATE users SET frozen=? WHERE id=?", (1 if d["freeze"] else 0, u["id"]), commit=True)
+    log(admin, "grant", {"user": u["username"], **{k: v for k, v in d.items() if k != "user"}})
+    return jsonify({"user": public_user(one("SELECT * FROM users WHERE id=?", (u["id"],)))})
+
+@app.post("/api/admin/take_username")
+def admin_take():
+    e = require_admin()
+    if e: return e
+    d = request.get_json(force=True)
+    u = one("SELECT * FROM users WHERE username=?", (str(d.get("username", "")).lower(),))
+    if not u: return jsonify({"error": "Не найден"}), 404
+    run("UPDATE users SET username=? WHERE id=?", ("id" + str(u["display_id"]), u["id"]), commit=True)
+    run("INSERT OR IGNORE INTO numbers(display_id,owner_id) VALUES(?,0)", (u["display_id"],), commit=True)
+    log("admin", "take_username", {"from": d.get("username")})
+    return jsonify({"ok": True})
+
+@app.post("/api/admin/drop")
+def admin_drop():
+    e = require_admin()
+    if e: return e
+    d = request.get_json(force=True)
+    count = min(int(d.get("count") or 10), 500)
+    rarity = d.get("rarity", "rare")
+    users = all_("SELECT id FROM users WHERE frozen=0 ORDER BY RANDOM() LIMIT ?", (count,))
+    made = []
+    for usr in users:
+        made.append(make_gift(usr["id"], 0, d.get("name"), rarity, rarity == "nft", 0)["id"])
+    log("admin", "drop", {"count": count, "rarity": rarity})
+    return jsonify({"dropped_to": len(made)})
+
+@app.get("/api/admin/logs")
+def admin_logs():
+    e = require_admin()
+    if e: return e
+    return jsonify({"logs": all_("SELECT * FROM logs ORDER BY id DESC LIMIT 200")})
+
+@app.post("/api/admin/broadcast")
+def admin_broadcast():
+    e = require_admin()
+    if e: return e
+    d = request.get_json(force=True)
+    text = (d.get("text") or "")[:1000]
+    ch = one("SELECT id FROM chats WHERE username='anoxgram'")
+    if not ch:
+        run("""INSERT INTO chats(type,title,username,owner_id,public,about,link_key,created_at)
+               VALUES('channel','AnoxGram News','anoxgram',1,1,'Официальный канал',?,?)""",
+            (secrets.token_urlsafe(6), NOW()), commit=True)
+        ch = one("SELECT id FROM chats WHERE username='anoxgram'")
+    run("INSERT INTO messages(chat_id,user_id,text,created_at) VALUES(?,?,?,?)",
+        (ch["id"], 1, "📢 " + text, NOW()), commit=True)
+    log("admin", "broadcast", {"text": text[:100]})
+    return jsonify({"ok": True, "channel_id": ch["id"]})
+
+@app.get("/api/health")
+def health():
+    return jsonify({"ok": True, "pg": USE_PG, "time": NOW()})
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
