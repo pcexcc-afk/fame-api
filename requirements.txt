@@ -1,7 +1,6 @@
-Flask
-requests
-beautifulsoup4
-deep-translator
-duckduckgo-search
-python-dotenv
-gunicorn
+flask==3.0.3
+flask-cors==4.0.1
+flask-socketio==5.3.6
+simple-websocket==1.0.0
+gunicorn==22.0.0
+werkzeug==3.0.3
