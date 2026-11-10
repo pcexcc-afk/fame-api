@@ -296,7 +296,7 @@ def own_free(u, iid): return q("select * from inv where id=? and uid=? and price
 def gift_send(u):
     d = request.json or {}; p = uby(d.get("to"))
     if not own_free(u, toint(d.get("inv"))) or not p or p["id"] == u["id"]: return err("Нельзя отправить")
-    run("update inv set uid=? where id=?", (p["id"], toint(d["inv"])))
+    run("update inv set uid=? where id=?", (p["id"], toint(d.get("inv"))))
     return jsonify(ok=1)
 
 @app.post("/api/market/list")
