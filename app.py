@@ -10,50 +10,39 @@ C = "https://upload.wikimedia.org/wikipedia/commons/"
 
 FLAG = C + "f/f3/Flag_of_Russia.svg"
 ARMS = C + "f/f2/Coat_of_Arms_of_the_Russian_Federation.svg"
-# ✅ АУДИО (ogg), а не видео
-AUDIO = C + "2/2e/National_Anthem_of_Russia_%282000%29%2C_three_verses.ogg"
+# Надёжная MP3 ссылка на гимн (работает в любом браузере)
+AUDIO = "https://upload.wikimedia.org/wikipedia/commons/transcoded/2/2e/National_Anthem_of_Russia_%282000%29%2C_three_verses.ogg/National_Anthem_of_Russia_%282000%29%2C_three_verses.ogg.mp3"
 
-# ✅ Проверенные ссылки на фото с Commons
 SIGHTS = [
     {"title": "Ленинский мемориал",
-     "img": C + "thumb/1/15/Ulyanovsk_Leninskiy_memorial.jpg/960px-Ulyanovsk_Leninskiy_memorial.jpg",
-     "q": "Ulyanovsk Leninskiy memorial",
+     "lat": 54.3155, "lon": 48.4065,
      "text": "Мемориальный комплекс открыли в 1970 году к 100-летию со дня рождения В. И. Ленина. Внутри здания, во дворе, стоит дом, где родился Владимир Ленин. Это самое известное место города."},
     {"title": "Дом-музей В. И. Ленина",
-     "img": C + "thumb/c/c2/%D0%94%D0%BE%D0%BC-%D0%BC%D1%83%D0%B7%D0%B5%D0%B9_%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0_%281%29_%28%D0%A3%D0%BB%D1%8C%D1%8F%D0%BD%D0%BE%D0%B2%D1%81%D0%BA%29.jpg/960px-%D0%94%D0%BE%D0%BC-%D0%BC%D1%83%D0%B7%D0%B5%D0%B9_%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0_%281%29_%28%D0%A3%D0%BB%D1%8C%D1%8F%D0%BD%D0%BE%D0%B2%D1%81%D0%BA%29.jpg",
-     "q": "Lenin house museum Ulyanovsk",
+     "lat": 54.3189, "lon": 48.4066,
      "text": "В этом деревянном доме семья Ульяновых жила в 1878–1887 годах. Сохранилась обстановка, как при маленьком Володе. Музей помогает представить жизнь семьи в Симбирске."},
     {"title": "Музей-заповедник «Родина В. И. Ленина»",
-     "img": C + "thumb/1/11/%D0%94%D0%BE%D0%BC-%D0%BC%D1%83%D0%B7%D0%B5%D0%B9_%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0_%D1%81%D0%BE_%D1%81%D1%82%D0%BE%D1%80%D0%BE%D0%BD%D1%8B_%D0%B4%D0%B2%D0%BE%D1%80%D0%B0.jpg/960px-%D0%94%D0%BE%D0%BC-%D0%BC%D1%83%D0%B7%D0%B5%D0%B9_%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0_%D1%81%D0%BE_%D1%81%D1%82%D0%BE%D1%80%D0%BE%D0%BD%D1%8B_%D0%B4%D0%B2%D0%BE%D1%80%D0%B0.jpg",
-     "q": "Ulyanovsk Lenin memorial house",
+     "lat": 54.3148, "lon": 48.4078,
      "text": "Это целый музейный комплекс из десятков домов и выставок в центре города. Здесь можно узнать, как жили симбиряне в XIX веке. Территорию называют историческим сердцем Ульяновска."},
     {"title": "Краеведческий музей имени Гончарова",
-     "img": C + "thumb/a/ad/Dom_Goncharov1.jpg/960px-Dom_Goncharov1.jpg",
-     "q": "Goncharov museum Ulyanovsk",
+     "lat": 54.3131, "lon": 48.4024,
      "text": "Музей рассказывает о природе и истории Ульяновской области. Он носит имя писателя Ивана Гончарова, автора романа «Обломов». Гончаров родился в Симбирске."},
     {"title": "Музей гражданской авиации",
-     "img": C + "thumb/0/03/Tupolev_Tu-144%2C_Ulyanovsk_Aircraft_Museum.jpg/960px-Tupolev_Tu-144%2C_Ulyanovsk_Aircraft_Museum.jpg",
-     "q": "Ulyanovsk aircraft museum",
+     "lat": 54.2697, "lon": 48.2365,
      "text": "Здесь стоят настоящие самолёты и вертолёты, внутрь некоторых можно зайти. Ульяновск называют авиационной столицей России. Рядом находится училище лётчиков."},
     {"title": "Соборная площадь",
-     "img": C + "thumb/2/2b/%D0%92%D1%8B%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%B0_%D0%BD%D0%B0_%D0%A1%D0%BE%D0%B1%D0%BE%D1%80%D0%BD%D0%BE%D0%B9_%D0%BF%D0%BB%D0%BE%D1%89%D0%B0%D0%B4%D0%B8_%281%29.jpg/960px-%D0%92%D1%8B%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%B0_%D0%BD%D0%B0_%D0%A1%D0%BE%D0%B1%D0%BE%D1%80%D0%BD%D0%BE%D0%B9_%D0%BF%D0%BB%D0%BE%D1%89%D0%B0%D0%B4%D0%B8_%281%29.jpg",
-     "q": "Sobornaya square Ulyanovsk",
+     "lat": 54.3169, "lon": 48.4036,
      "text": "Главная площадь города, где проходят праздники и выставки. Рядом стоит Спасо-Вознесенский собор. Это любимое место прогулок ульяновцев."},
     {"title": "Волжская набережная (бульвар Новый Венец)",
-     "img": C + "thumb/d/da/The_city_of_Ulyanovsk%2C_Russia.jpg/960px-The_city_of_Ulyanovsk%2C_Russia.jpg",
-     "q": "Novy Venets Ulyanovsk",
+     "lat": 54.3129, "lon": 48.4121,
      "text": "Бульвар тянется по высокому берегу Волги. Отсюда открываются огромные виды на реку и заволжские дали. Вечером здесь гуляют семьи с детьми."},
     {"title": "Президентский мост",
-     "img": C + "thumb/c/cd/%D0%9F%D1%80%D0%B5%D0%B7%D0%B8%D0%B4%D0%B5%D0%BD%D1%82%D1%81%D0%BA%D0%B8%D0%B9_%D0%BC%D0%BE%D1%81%D1%82_%D1%87%D0%B5%D1%80%D0%B5%D0%B7_%D1%80._%D0%92%D0%BE%D0%BB%D0%B3%D1%83.jpg/960px-%D0%9F%D1%80%D0%B5%D0%B7%D0%B8%D0%B4%D0%B5%D0%BD%D1%82%D1%81%D0%BA%D0%B8%D0%B9_%D0%BC%D0%BE%D1%81%D1%82_%D1%87%D0%B5%D1%80%D0%B5%D0%B7_%D1%80._%D0%92%D0%BE%D0%BB%D0%B3%D1%83.jpg",
-     "q": "President bridge Ulyanovsk",
+     "lat": 54.3385, "lon": 48.4705,
      "text": "Один из самых длинных мостов Европы, он перекинут через Волгу. Длина моста около 5,8 километра. Ночью его огни отражаются в воде."},
     {"title": "Памятник букве «Ё»",
-     "img": C + "4/4e/Monument_%D0%811.jpg",
-     "q": "Monument letter Yo Ulyanovsk",
-     "text": "Гранитную букву открыли в 2005 году на бульваре Новый Венец, рядом с областной научной библиотекой. Она весит больше трёх тонн. Букву «ё» в печати одним из первых использовал писатель Николай Карамзин, уроженец Симбирской губернии."},
+     "lat": 54.3143, "lon": 48.4050,
+     "text": "Гранитную букву открыли в 2005 году на бульваре Новый Венец, рядом с областной научной библиотекой. Она весит больше трёх тонн. Букву «ё» в печати одним из первых использовал писатель Николай Карамзин."},
     {"title": "Ульяновский драматический театр",
-     "img": C + "thumb/3/3f/Ulyanovsk_Spasskaya_zdanie_na_meste_teatra.jpg/960px-Ulyanovsk_Spasskaya_zdanie_na_meste_teatra.jpg",
-     "q": "Ulyanovsk drama theatre",
+     "lat": 54.3161, "lon": 48.4009,
      "text": "Один из старейших театров Поволжья, он работает с XIX века. На его сцене идут спектакли для взрослых и для детей. Здание стоит в самом центре города."},
 ]
 
