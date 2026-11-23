@@ -10,7 +10,7 @@ C = "https://upload.wikimedia.org/wikipedia/commons/"
 
 FLAG = C + "f/f3/Flag_of_Russia.svg"
 ARMS = C + "f/f2/Coat_of_Arms_of_the_Russian_Federation.svg"
-# Надёжная MP3 ссылка на гимн (работает в любом браузере)
+# Надёжная MP3-ссылка на гимн (работает на iPhone/Safari)
 AUDIO = "https://upload.wikimedia.org/wikipedia/commons/transcoded/2/2e/National_Anthem_of_Russia_%282000%29%2C_three_verses.ogg/National_Anthem_of_Russia_%282000%29%2C_three_verses.ogg.mp3"
 
 SIGHTS = [
